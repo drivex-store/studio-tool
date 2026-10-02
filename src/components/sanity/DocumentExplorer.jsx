@@ -88,9 +88,12 @@ export default function DocumentExplorer({ onLoadDocument, onToast }) {
         />
         <input
           type="text"
-          placeholder="Search ID / title"
+          placeholder="Search ID / URL / title / filename"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") fetchDocs();
+          }}
           className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-sky-600 focus:outline-none"
         />
         <button
@@ -122,13 +125,16 @@ export default function DocumentExplorer({ onLoadDocument, onToast }) {
                   </p>
                   <p className="text-xs text-zinc-500">
                     {doc._type}
-                    {doc.title || doc.name
-                      ? ` · ${doc.title || doc.name}`
+                    {doc.title || doc.name || doc.originalFilename
+                      ? ` · ${doc.title || doc.name || doc.originalFilename}`
                       : ""}
                     {doc._updatedAt
                       ? ` · ${new Date(doc._updatedAt).toLocaleDateString()}`
                       : ""}
                   </p>
+                  {doc.url && (
+                    <p className="truncate font-mono text-[11px] text-zinc-600">{doc.url}</p>
+                  )}
                 </div>
                 <div className="flex shrink-0 gap-1">
                   <button
@@ -155,7 +161,7 @@ export default function DocumentExplorer({ onLoadDocument, onToast }) {
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         title="Delete document?"
-        message={`Permanently delete “${deleteTarget}”? This cannot be undone.`}
+        message={`Permanently delete "${deleteTarget}"? This cannot be undone.`}
         confirmLabel="Delete"
         danger
         onConfirm={handleDelete}
