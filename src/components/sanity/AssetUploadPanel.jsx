@@ -3,7 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import FileUploadQueue from "./FileUploadQueue";
 import AssetPreview from "./AssetPreview";
-import { sanityFetch } from "@/lib/sanity/clientSettings";
+import { sanityFetch, uploadAssetDirect } from "@/lib/sanity/clientSettings";
 
 const IMAGE_ACCEPT =
   "image/jpeg,image/jpg,image/png,image/webp,image/gif,image/svg+xml";
@@ -83,21 +83,31 @@ export default function AssetUploadPanel({ onAssetUploaded, onInsertRef, onToast
   const uploadOne = async (item) => {
     updateItem(item.id, { status: "uploading", progress: 20, error: null });
 
-    const formData = new FormData();
-    formData.append("file", item.file);
     const isImage = item.file.type?.startsWith("image/");
-    formData.append("assetType", isImage ? "image" : "file");
+    const assetType = isImage ? "image" : "file";
 
     try {
-      const res = await sanityFetch("/api/sanity/assets", {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || `Upload failed (${res.status})`);
+      // 1) tiny JSON call: delete an existing asset with the same filename
+      let replacedExisting = false;
+      let replaceWarning = null;
+      try {
+        const r = await sanityFetch("/api/sanity/assets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "replace-existing",
+            filename: item.file.name,
+            assetType,
+          }),
+        });
+        if (r.ok) ({ replacedExisting, replaceWarning } = await r.json());
+      } catch {
+        /* replace step is best-effort */
       }
+
+      // 2) upload the file directly to Sanity (no size limit from Vercel)
+      const asset = await uploadAssetDirect(item.file, assetType);
+      const data = { asset, replacedExisting, replaceWarning };
 
       updateItem(item.id, {
         status: "uploaded",

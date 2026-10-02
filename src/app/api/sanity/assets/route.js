@@ -19,6 +19,34 @@ export async function POST(request) {
   try {
     const contentType = request.headers.get("content-type") || "";
 
+    // Lightweight JSON call: remove an existing asset with the same filename.
+    // The actual file upload now goes browser -> Sanity directly, so large
+    // files never pass through this serverless function (Vercel limit ~4.5 MB).
+    if (contentType.includes("application/json")) {
+      const { action, filename, assetType } = await request.json();
+      if (action !== "replace-existing" || !filename) {
+        return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+      }
+      const client = getSanityWriteClient(request);
+      const docType = assetType === "image" ? "sanity.imageAsset" : "sanity.fileAsset";
+      let replacedExisting = false;
+      let replaceWarning = null;
+      try {
+        const existing = await client.fetch(
+          `*[_type == $type && originalFilename == $name][0]{_id}`,
+          { type: docType, name: filename }
+        );
+        if (existing?._id) {
+          await client.delete(existing._id);
+          replacedExisting = true;
+        }
+      } catch (err) {
+        replaceWarning =
+          "A previous asset with this filename exists but is still referenced by another document, so it wasn't removed.";
+      }
+      return NextResponse.json({ replacedExisting, replaceWarning });
+    }
+
     if (!contentType.includes("multipart/form-data")) {
       return NextResponse.json(
         { error: "Content-Type must be multipart/form-data" },
